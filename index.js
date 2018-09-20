@@ -1,17 +1,13 @@
-var bs58check = require('bs58check')
-var bufferEquals = require('buffer-equals')
 var createHash = require('create-hash')
 var secp256k1 = require('secp256k1')
 var varuint = require('varuint-bitcoin')
+var { pubKeyToAddress } = require('@cobo/crypto-address')
 
 function sha256 (b) {
   return createHash('sha256').update(b).digest()
 }
 function hash256 (buffer) {
   return sha256(sha256(buffer))
-}
-function hash160 (buffer) {
-  return createHash('ripemd160').update(sha256(buffer)).digest()
 }
 
 function encodeSignature (signature, recovery, compressed) {
@@ -56,11 +52,24 @@ function verify (message, address, signature, messagePrefix) {
   var parsed = decodeSignature(signature)
   var hash = magicHash(message, messagePrefix)
   var publicKey = secp256k1.recover(hash, parsed.signature, parsed.recovery, parsed.compressed)
+  var addressType = verifyAddressType(address)
+  var actual = pubKeyToAddress(publicKey, 'bitcoin', addressType, parsed.compressed)
 
-  var actual = hash160(publicKey)
-  var expected = bs58check.decode(address).slice(1)
+  return actual === address
+}
 
-  return bufferEquals(actual, expected)
+function verifyAddressType (address) {
+  if (address[0] === '1') {
+    return 'BITCOIN_BASIC'
+  }
+
+  if (address[0] === '3') {
+    return 'SEGWIT_P2SH'
+  }
+
+  if (address.slice(0, 3) === 'bc1') {
+    return 'SEGWIT_BECH32'
+  }
 }
 
 module.exports = {
